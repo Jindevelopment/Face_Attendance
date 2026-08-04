@@ -1,25 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import * as faceapi from "face-api.js";
 import FaceCapture from "@/components/FaceCapture";
+import { cosineDistance, FACENET512_COSINE_THRESHOLD } from "@/lib/vectorMath";
 
-const MATCH_DISTANCE_THRESHOLD = 0.5; // 낮을수록 엄격 (face-api.js 권장 기본값)
+// cosine distance 기준 (0 에 가까울수록 동일 인물).
+// Facenet512 기본값(0.30) 을 사용. 실측 데이터로 재보정 권장.
+const MATCH_DISTANCE_THRESHOLD = FACENET512_COSINE_THRESHOLD;
 
 export default function AttendancePage() {
   const [status, setStatus] = useState(null); // { type: 'success'|'spoof'|'no_match'|'duplicate', ... }
   const [processing, setProcessing] = useState(false);
+  const [phase, setPhase] = useState("idle"); // idle | client | analyzing | matching
   const [scanKey, setScanKey] = useState(0);
 
   async function handleCapture(metrics) {
     setProcessing(true);
     setStatus(null);
+    setPhase("client");
     try {
-      // 1) 위조 판별 우선 (얼굴 매칭보다 먼저 수행)
+      // === 1단계: 클라이언트 1차 방어선 (경량 휴리스틱) ===
       if (!metrics.livenessPassed) {
         await logResult({
           result: "REJECTED_SPOOF",
-          reason: "라이브니스 판별 실패 (사진/화면 재생 의심)",
+          reason: "클라이언트 라이브니스 실패 (사진/화면 재생 의심)",
           metrics,
         });
         setStatus({
@@ -42,8 +46,86 @@ export default function AttendancePage() {
         });
         return;
       }
+      if (!metrics.image) {
+        setStatus({
+          type: "no_match",
+          title: "캡처 실패",
+          desc: "카메라 프레임을 가져오지 못했습니다. 다시 시도해주세요.",
+        });
+        return;
+      }
 
-      // 2) 얼굴 매칭
+      // === 2단계: 서버 DeepFace (Facenet512 embedding + MiniFASNet 라이브니스) ===
+      setPhase("analyzing");
+      let dfRes;
+      try {
+        dfRes = await fetch("/api/deepface", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: metrics.image, mode: "attendance" }),
+        });
+      } catch (netErr) {
+        setStatus({
+          type: "no_match",
+          title: "네트워크 오류",
+          desc: "DeepFace 프록시로의 요청이 실패했습니다. 잠시 후 다시 시도해주세요.",
+        });
+        return;
+      }
+      const df = await dfRes.json();
+      if (!dfRes.ok) {
+        // /api/deepface 는 message 필드로 사용자용 안내 문구를 제공한다.
+        setStatus({
+          type: "no_match",
+          title:
+            df?.error === "deepface_server_down"
+              ? "DeepFace 서버 꺼짐"
+              : df?.error === "deepface_timeout"
+                ? "DeepFace 서버 응답 지연"
+                : "DeepFace 서버 오류",
+          desc:
+            df?.message ||
+            df?.error ||
+            "서버 응답 실패. deepface-api 프로세스가 5005 포트에서 실행 중인지 확인하세요.",
+        });
+        return;
+      }
+
+      const deepfaceIsReal = df.isReal;
+      const deepfaceAntispoofScore =
+        typeof df.antispoofScore === "number"
+          ? Number(df.antispoofScore.toFixed(4))
+          : null;
+
+      if (deepfaceIsReal === false) {
+        await logResult({
+          result: "REJECTED_SPOOF",
+          reason: `DeepFace 라이브니스 실패 (antispoof ${deepfaceAntispoofScore ?? "N/A"})`,
+          metrics,
+          deepfaceIsReal,
+          deepfaceAntispoofScore,
+        });
+        setStatus({
+          type: "spoof",
+          title: "서버 실물 판별 실패",
+          desc: `DeepFace(MiniFASNet) 위조 판정 · antispoof score ${
+            deepfaceAntispoofScore ?? "N/A"
+          }`,
+        });
+        return;
+      }
+
+      if (!Array.isArray(df.embedding) || df.embedding.length === 0) {
+        setStatus({
+          type: "no_match",
+          title: "임베딩 실패",
+          desc: "DeepFace 가 얼굴 임베딩을 반환하지 않았습니다.",
+        });
+        return;
+      }
+
+      // === 3단계: 등록 사용자와 cosine distance 매칭 ===
+      setPhase("matching");
       const res = await fetch("/api/users");
       const { users } = await res.json();
       if (!users || users.length === 0) {
@@ -51,28 +133,48 @@ export default function AttendancePage() {
         return;
       }
 
-      const inputDescriptor = new Float32Array(metrics.descriptor);
       let best = null;
+      let legacyCount = 0;
       for (const u of users) {
-        const d = faceapi.euclideanDistance(inputDescriptor, new Float32Array(u.descriptor));
+        if (!Array.isArray(u.embedding) || u.embedding.length !== df.embedding.length) {
+          // 구버전(face-api.js 128-d descriptor 등) 사용자는 매칭 대상 아님.
+          legacyCount += 1;
+          continue;
+        }
+        const d = cosineDistance(df.embedding, u.embedding);
         if (!best || d < best.distance) best = { user: u, distance: d };
       }
 
+      const eligibleCount = users.length - legacyCount;
+
       if (!best || best.distance > MATCH_DISTANCE_THRESHOLD) {
+        const legacyNote =
+          legacyCount > 0
+            ? ` (매칭 제외된 레거시 유저 ${legacyCount}명 — 재등록 필요)`
+            : "";
         await logResult({
           result: "REJECTED_NO_MATCH",
-          reason: `매칭 실패 (최소 거리 ${best ? best.distance.toFixed(3) : "N/A"})`,
+          reason: `매칭 실패 (최소 cos 거리 ${
+            best ? best.distance.toFixed(4) : "N/A"
+          }, 매칭 대상 ${eligibleCount}명${legacyNote})`,
           metrics,
+          deepfaceIsReal,
+          deepfaceAntispoofScore,
+          matchDistance: best ? Number(best.distance.toFixed(4)) : null,
         });
         setStatus({
           type: "no_match",
           title: "일치하는 사용자 없음",
-          desc: "등록된 얼굴과 일치하지 않습니다.",
+          desc:
+            legacyCount > 0
+              ? `등록된 얼굴과 일치하지 않습니다. 대시보드에 표시된 레거시(재등록 필요) 사용자 ${legacyCount}명이 있는지 확인해주세요.`
+              : "등록된 얼굴과 일치하지 않습니다.",
         });
         return;
       }
 
-      // 3) 출결 기록
+      // === 4단계: 출결 기록 ===
+      const matchDistance = Number(best.distance.toFixed(4));
       const attRes = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -83,7 +185,10 @@ export default function AttendancePage() {
           blinkDetected: metrics.blinkDetected,
           jitterScore: metrics.jitterScore,
           syntheticScore: metrics.syntheticScore,
-          matchDistance: Number(best.distance.toFixed(4)),
+          matchDistance,
+          deepfaceIsReal,
+          deepfaceAntispoofScore,
+          challengeSequence: metrics.challengeSequence,
           result: "SUCCESS",
         }),
       });
@@ -99,18 +204,28 @@ export default function AttendancePage() {
         setStatus({
           type: "success",
           title: `${best.user.name}님 출석 완료`,
-          desc: `매칭 거리 ${best.distance.toFixed(3)} · 위조판별 통과`,
+          desc: `cos 거리 ${matchDistance} · DeepFace 실물 판정 · antispoof ${
+            deepfaceAntispoofScore ?? "N/A"
+          }`,
         });
       }
     } catch (e) {
       setStatus({ type: "no_match", title: "오류 발생", desc: e.message });
     } finally {
       setProcessing(false);
+      setPhase("idle");
       setScanKey((k) => k + 1);
     }
   }
 
-  async function logResult({ result, reason, metrics }) {
+  async function logResult({
+    result,
+    reason,
+    metrics,
+    deepfaceIsReal = null,
+    deepfaceAntispoofScore = null,
+    matchDistance = null,
+  }) {
     await fetch("/api/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,6 +234,10 @@ export default function AttendancePage() {
         blinkDetected: metrics.blinkDetected,
         jitterScore: metrics.jitterScore,
         syntheticScore: metrics.syntheticScore,
+        matchDistance,
+        deepfaceIsReal,
+        deepfaceAntispoofScore,
+        challengeSequence: metrics.challengeSequence,
         result,
         reason,
       }),
@@ -129,12 +248,41 @@ export default function AttendancePage() {
     <div style={{ maxWidth: 560, margin: "0 auto", padding: "48px 24px" }}>
       <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em" }}>출결 체크</h1>
       <p style={{ color: "var(--text-dim)", fontSize: 14, marginTop: 6, marginBottom: 32 }}>
-        카메라 앞에 정면으로 서서 스캔 버튼을 눌러주세요. 위조 판별을 통과한 경우에만 출결이 기록됩니다.
+        스캔 버튼을 누르면 <strong>화면에 표시되는 순서대로 고개를 좌우로 살짝 돌려주세요</strong>
+        (순서는 매번 랜덤). 능동 챌린지 통과 → 클라이언트 1차 검증(눈깜빡임/합성 휴리스틱) →
+        DeepFace 서버 2차 검증(라이브니스 + Facenet512 매칭)을 모두 통과한 경우에만 출결이 기록됩니다.
       </p>
 
       <FaceCapture key={scanKey} actionLabel={processing ? "처리 중..." : "출결 스캔"} onCapture={handleCapture} />
 
+      {phase !== "idle" && <PhaseBanner phase={phase} />}
       {status && <StatusPanel status={status} />}
+    </div>
+  );
+}
+
+function PhaseBanner({ phase }) {
+  const text = {
+    client: "클라이언트 라이브니스/합성 판정 중...",
+    analyzing: "DeepFace 서버 분석 중 (임베딩 + MiniFASNet 라이브니스, 수 초 소요)",
+    matching: "등록 사용자와 매칭 중...",
+  }[phase];
+  if (!text) return null;
+  return (
+    <div
+      className="mono"
+      style={{
+        marginTop: 18,
+        padding: 12,
+        borderRadius: 8,
+        border: "1px solid var(--border)",
+        background: "var(--panel)",
+        color: "var(--text-dim)",
+        fontSize: 12.5,
+        textAlign: "center",
+      }}
+    >
+      {text}
     </div>
   );
 }

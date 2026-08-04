@@ -41,3 +41,18 @@ yarn-error.log*
 
 # local database (contains personal data: names, contacts, face descriptors)
 /data/db.json
+
+# python (deepface-api) — 원본은 deepface-api/.gitignore 에도 있으나 defense-in-depth 로 여기서도 차단
+deepface-api/.venv/
+deepface-api/venv/
+__pycache__/
+*.pyc
+
+# test face images — 절대 커밋 금지 (실제 얼굴 사진)
+deepface-api/*.jpg
+deepface-api/*.jpeg
+deepface-api/*.png
+deepface-api/*.webp
+
+# Claude Code 로컬 세션/설정 (권한 승인 목록, 스케줄러 락) — 공유 대상 아님
+/.claude/

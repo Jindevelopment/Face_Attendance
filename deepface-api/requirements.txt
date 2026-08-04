@@ -1,0 +1,21 @@
+# Python 3.10 / 3.11 권장
+# CPU 환경 기준. GPU 사용 시 torch/tensorflow 관련 패키지 별도 재설치 필요.
+
+# --- Web server ---
+flask==3.0.3
+flask-cors==5.0.0
+python-dotenv==1.0.1
+
+# --- DeepFace core ---
+# DeepFace 는 내부적으로 keras/tensorflow, opencv, gdown, mtcnn 등을 자동으로 끌어옵니다.
+deepface==0.0.93
+tf-keras==2.16.0
+
+# --- Anti-spoofing 백엔드 (MiniFASNet) ---
+# DeepFace 의 anti_spoofing 옵션이 torch 기반 MiniFASNet 가중치를 로드하므로 torch 가 필요합니다.
+# CPU 전용 빌드로 설치하려면 pip 로 아래 인덱스 URL 을 지정해 설치하세요:
+#   pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+
+# --- HTTP 클라이언트 (테스트/유틸용) ---
+requests==2.32.3

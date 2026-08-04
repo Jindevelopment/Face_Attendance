@@ -2,13 +2,54 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as faceapi from "face-api.js";
-import { computeEAR, detectBlink, landmarkJitterScore, computeSyntheticScore } from "@/lib/clientVision";
+import {
+  computeEAR,
+  detectBlink,
+  landmarkJitterScore,
+  computeSyntheticScore,
+  computeYawRatio,
+} from "@/lib/clientVision";
 
 const MODEL_URL = "/models";
 const SCAN_FRAME_COUNT = 14;
 const SCAN_INTERVAL_MS = 110;
 const JITTER_THRESHOLD = 0.35; // px 단위, 데모용 임계값(재보정 필요)
 const SYNTHETIC_SUSPECT_THRESHOLD = 60; // 0~100, 이상이면 AI 생성 의심
+
+// 능동 챌린지(active liveness) 파라미터.
+// 매 스캔마다 랜덤 시퀀스(좌우 조합 4가지 중 1)를 뽑아 순차 지시. 각 단계는 |yawRatio| ≥
+// YAW_THRESHOLD 도달로 통과. 통과 시에만 DeepFace 파이프라인 진입.
+// 2단계부터는 requireReset=true 로 두어, 이전 단계의 yaw 가 남아있는 상태에서 즉시
+// 통과되지 않도록 |yaw| < RESET_YAW 를 먼저 관측한 뒤에만 목표 방향 도달을 검사한다.
+const YAW_THRESHOLD = 0.15;
+const RESET_YAW = 0.05;
+const CHALLENGE_TIMEOUT_MS = 5000;
+const CHALLENGE_INTERVAL_MS = 100;
+
+const CHALLENGE_SEQUENCES = [
+  ["left", "right"],
+  ["right", "left"],
+  ["left", "left"],
+  ["right", "right"],
+];
+
+function pickChallengeSequence() {
+  return CHALLENGE_SEQUENCES[Math.floor(Math.random() * CHALLENGE_SEQUENCES.length)];
+}
+
+function directionLabel(dir) {
+  return dir === "left" ? "왼쪽" : "오른쪽";
+}
+
+function buildChallengePrompt(sequence, step) {
+  const label = directionLabel(sequence[step]);
+  if (step === 0) return `고개를 ${label}으로 살짝 돌려주세요`;
+  const prev = sequence[step - 1];
+  if (prev === sequence[step]) {
+    return `정면으로 돌아온 뒤 다시 ${label}으로 돌려주세요`;
+  }
+  return `정면으로 돌아온 뒤 이번엔 ${label}으로 돌려주세요`;
+}
 
 export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }) {
   const videoRef = useRef(null);
@@ -21,6 +62,8 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [liveMetrics, setLiveMetrics] = useState(null);
+  // 능동 챌린지 지시 문구. null 이면 배너 미표시(= 챌린지 중 아님 또는 캡처 스캔 단계).
+  const [challengePrompt, setChallengePrompt] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,12 +117,73 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
   ).current;
 
+  // 챌린지 한 단계 수행. direction: "left" (본인 왼쪽, yawRatio > +YAW_THRESHOLD)
+  //                             "right" (본인 오른쪽, yawRatio < -YAW_THRESHOLD)
+  // requireReset=true 이면 |yaw| < RESET_YAW 를 먼저 관측한 뒤에만 목표 방향 검사 시작
+  // (같은 방향 연속 시퀀스에서 이전 상태 잔존으로 인한 즉시 통과 방지).
+  // 5초 안에 조건 충족 시 true, 타임아웃 시 false.
+  const runChallenge = useCallback(
+    async (direction, { requireReset = false } = {}) => {
+      const expectedSign = direction === "left" ? 1 : -1;
+      const startedAt = Date.now();
+      let resetSeen = !requireReset;
+      while (Date.now() - startedAt < CHALLENGE_TIMEOUT_MS) {
+        const detection = await faceapi
+          .detectSingleFace(videoRef.current, detectOptions)
+          .withFaceLandmarks();
+        if (detection) {
+          drawOverlay(detection, "scanning");
+          const yaw = computeYawRatio(detection.landmarks.positions);
+          if (!resetSeen) {
+            if (Math.abs(yaw) < RESET_YAW) resetSeen = true;
+          } else {
+            if (expectedSign > 0 && yaw > YAW_THRESHOLD) return true;
+            if (expectedSign < 0 && yaw < -YAW_THRESHOLD) return true;
+          }
+        }
+        await new Promise((r) => setTimeout(r, CHALLENGE_INTERVAL_MS));
+      }
+      return false;
+    },
+    [detectOptions]
+  );
+
   const runScan = useCallback(async () => {
     if (!modelsLoaded || !cameraReady || scanning) return;
     setError("");
     setScanning(true);
     setProgress(0);
     setLiveMetrics(null);
+
+    // === 능동 챌린지 게이트: 매 시도마다 랜덤 시퀀스. 실패 시 DeepFace 호출 없이 즉시 중단. ===
+    const challengeSequence = pickChallengeSequence();
+    for (let step = 0; step < challengeSequence.length; step++) {
+      const dir = challengeSequence[step];
+      const promptText = buildChallengePrompt(challengeSequence, step);
+      setChallengePrompt(promptText);
+      const ok = await runChallenge(dir, { requireReset: step > 0 });
+      if (!ok) {
+        // 챌린지 실패는 서버 로그로 안 남는다 (DeepFace 호출 전 return). 대신 개발자 콘솔에
+        // 지상 진실(어떤 시퀀스가 뽑혔고, 몇 번째에서 어떤 문구를 띄우고 어떤 방향을
+        // 검사하다 실패했는지) 을 남겨서 시퀀스/문구/검사방향 불일치 의심을 사후 검증.
+        console.warn("[FaceCapture] challenge failed", {
+          challengeSequence: challengeSequence.map((d) => (d === "left" ? "L" : "R")),
+          challengeSequenceRaw: challengeSequence,
+          failedStep: step,
+          bannerPromptAtFailure: promptText,
+          runChallengeDir: dir,
+          requireReset: step > 0,
+        });
+        setChallengePrompt(null);
+        setError(
+          `챌린지 실패: 5초 안에 지시된 방향(${directionLabel(dir)})으로 회전이 감지되지 않았습니다. 다시 시도해주세요.`
+        );
+        setScanning(false);
+        clearOverlay();
+        return;
+      }
+    }
+    setChallengePrompt(null);
 
     const frames = [];
     for (let i = 0; i < SCAN_FRAME_COUNT; i++) {
@@ -113,10 +217,17 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     const last = frames[frames.length - 1];
     const syntheticResult = extractSyntheticScore(videoRef.current, last.detection.box);
 
-    // 3) 얼굴 디스크립터 (매칭용)
+    // 3) 얼굴 디스크립터 (매칭용) — 클라이언트 1차 방어선(합성/라이브니스 휴리스틱) 유지용.
+    //    실제 매칭은 서버(DeepFace Facenet512 embedding) 에서 수행하지만,
+    //    descriptor 계산은 그대로 남겨둔다.
     const descriptor = Array.from(last.descriptor);
 
+    // 4) 서버(/api/deepface) 로 보낼 원본 프레임 이미지 (JPEG base64).
+    //    거울 반전(scaleX(-1)) 은 화면 표시용이라 원본 프레임 그대로 캡처한다.
+    const image = extractFrameImage(videoRef.current);
+
     const metrics = {
+      challengeSequence,
       blinkDetected,
       jitterScore: Number(jitterScore.toFixed(3)),
       livenessPassed,
@@ -124,6 +235,7 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
       syntheticSuspect: syntheticResult.score >= SYNTHETIC_SUSPECT_THRESHOLD,
       framesUsed: frames.length,
       descriptor,
+      image,
       box: last.detection.box,
     };
 
@@ -132,7 +244,7 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     setScanning(false);
 
     onCapture?.(metrics);
-  }, [modelsLoaded, cameraReady, scanning, detectOptions, onCapture]);
+  }, [modelsLoaded, cameraReady, scanning, detectOptions, onCapture, runChallenge]);
 
   function drawOverlay(detection, status) {
     const canvas = overlayRef.current;
@@ -199,6 +311,7 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
         {!modelsLoaded && cameraReady && (
           <Overlay text="판별 모델 로딩 중..." />
         )}
+        {challengePrompt && <ChallengeBanner text={challengePrompt} />}
       </div>
 
       {error && (
@@ -222,7 +335,11 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
             cursor: modelsLoaded && cameraReady && !scanning ? "pointer" : "default",
           }}
         >
-          {scanning ? `스캔 중... ${progress}%` : actionLabel}
+          {scanning
+            ? challengePrompt
+              ? "고개 회전 확인 중..."
+              : `스캔 중... ${progress}%`
+            : actionLabel}
         </button>
       </div>
 
@@ -250,6 +367,30 @@ function Overlay({ text }) {
   );
 }
 
+function ChallengeBanner({ text }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 12,
+        left: 12,
+        right: 12,
+        padding: "10px 14px",
+        borderRadius: 8,
+        background: "rgba(6, 35, 28, 0.86)",
+        border: "1px solid var(--accent-verify)",
+        color: "var(--accent-verify)",
+        fontSize: 13,
+        fontWeight: 700,
+        textAlign: "center",
+        letterSpacing: "-0.01em",
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
 function MetricsReadout({ metrics }) {
   const rows = [
     ["BLINK_DETECTED", metrics.blinkDetected ? "YES" : "NO", metrics.blinkDetected ? "var(--accent-verify)" : "var(--accent-warn)"],
@@ -267,6 +408,18 @@ function MetricsReadout({ metrics }) {
       ))}
     </div>
   );
+}
+
+function extractFrameImage(video) {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, w, h);
+  // DeepFace 서버 전송용. quality 0.9 로 파일 크기와 인식 정확도 균형.
+  return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 function extractSyntheticScore(video, box) {

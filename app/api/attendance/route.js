@@ -24,6 +24,9 @@ export async function POST(request) {
     jitterScore,
     syntheticScore,
     matchDistance,
+    deepfaceIsReal,
+    deepfaceAntispoofScore,
+    challengeSequence, // 이번 스캔에서 무작위로 뽑힌 능동 챌린지 방향 배열 (예: ["left","right"])
     result, // "SUCCESS" | "REJECTED_SPOOF" | "REJECTED_NO_MATCH"
     reason,
   } = body;
@@ -49,7 +52,10 @@ export async function POST(request) {
       blinkDetected,
       jitterScore,
       syntheticScore,
-      matchDistance,
+      matchDistance, // cosine distance (Facenet512)
+      deepfaceIsReal,
+      deepfaceAntispoofScore,
+      challengeSequence: challengeSequence ?? null,
     });
     return NextResponse.json({ status: "SUCCESS", log }, { status: 201 });
   }
@@ -65,6 +71,9 @@ export async function POST(request) {
     jitterScore,
     syntheticScore,
     matchDistance,
+    deepfaceIsReal,
+    deepfaceAntispoofScore,
+    challengeSequence: challengeSequence ?? null,
     claimedUserId: userId || null,
     claimedName: name || null,
   });

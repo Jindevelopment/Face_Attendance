@@ -8,11 +8,11 @@ export async function GET() {
 
 export async function POST(request) {
   const body = await request.json();
-  const { name, guardianContact, descriptor } = body;
+  const { name, guardianContact, embedding } = body;
 
-  if (!name || !descriptor || !Array.isArray(descriptor)) {
+  if (!name || !embedding || !Array.isArray(embedding) || embedding.length === 0) {
     return NextResponse.json(
-      { error: "name과 descriptor(얼굴 특징 벡터)는 필수입니다." },
+      { error: "name 과 embedding(DeepFace Facenet512 벡터) 는 필수입니다." },
       { status: 400 }
     );
   }
@@ -21,7 +21,7 @@ export async function POST(request) {
     id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name,
     guardianContact: guardianContact || "",
-    descriptor, // Float32Array를 클라이언트에서 Array로 변환하여 전달
+    embedding, // 512차원 float 배열 (Facenet512)
     createdAt: new Date().toISOString(),
   };
 
