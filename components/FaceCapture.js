@@ -13,7 +13,6 @@ import {
 const MODEL_URL = "/models";
 const SCAN_FRAME_COUNT = 14;
 const SCAN_INTERVAL_MS = 110;
-const JITTER_THRESHOLD = 0.35; // px 단위, 데모용 임계값(재보정 필요)
 const SYNTHETIC_SUSPECT_THRESHOLD = 60; // 0~100, 이상이면 AI 생성 의심
 
 // 능동 챌린지(active liveness) 파라미터.
@@ -207,11 +206,20 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
       return;
     }
 
-    // 1) 라이브니스: 눈 깜빡임 + 미세 움직임(jitter)
+    // 1) 라이브니스 근거 = 능동 챌린지 통과.
+    //    챌린지에 실패하면 위에서 이미 return 했으므로, 이 지점 도달 = 랜덤 시퀀스를
+    //    지시대로 수행했음이 확정된 상태다.
+    //
+    //    blink / jitter 는 판정에서 제외하고 진단용으로만 기록한다 (README §4-1, §4-2):
+    //    - jitter: "정지 사진은 안 흔들린다"는 전제가 실측에서 뒤집혔다. 폰 화면을 손에
+    //      들면 손떨림이 프레임 전체를 흔들어 실물(2.458)보다 오히려 큰 값(13.947)이
+    //      나온다. 임계값 통과 조건으로 쓰면 공격을 돕는 방향으로 작용한다.
+    //    - blink: 스캔 구간이 1.5초(14프레임 × 110ms)로 평균 깜빡임 간격(3~4초)보다
+    //      짧아 실측에서 대부분 false. 필수 조건으로 걸면 정상 사용자가 통과하지 못한다.
     const earSeq = frames.map((f) => computeEAR(f.landmarks.positions));
     const blinkDetected = detectBlink(earSeq);
     const jitterScore = landmarkJitterScore(frames.map((f) => f.landmarks.positions));
-    const livenessPassed = blinkDetected || jitterScore > JITTER_THRESHOLD;
+    const livenessPassed = true;
 
     // 2) AI 생성 이미지 판별(휴리스틱): 마지막 프레임의 얼굴 영역 crop
     const last = frames[frames.length - 1];
@@ -392,10 +400,15 @@ function ChallengeBanner({ text }) {
 }
 
 function MetricsReadout({ metrics }) {
+  // BLINK/JITTER 는 판정에 쓰이지 않는 진단 지표라 강조색 없이 표시한다 (runScan 주석 참고).
+  const challengeSeq = (metrics.challengeSequence || [])
+    .map((d) => (d === "left" ? "L" : "R"))
+    .join(" → ");
   const rows = [
-    ["BLINK_DETECTED", metrics.blinkDetected ? "YES" : "NO", metrics.blinkDetected ? "var(--accent-verify)" : "var(--accent-warn)"],
-    ["JITTER_SCORE", metrics.jitterScore, "var(--text)"],
-    ["LIVENESS", metrics.livenessPassed ? "PASS" : "FAIL", metrics.livenessPassed ? "var(--accent-verify)" : "var(--accent-danger)"],
+    ["CHALLENGE_SEQ", challengeSeq || "-", "var(--accent-verify)"],
+    ["LIVENESS", metrics.livenessPassed ? "PASS (challenge)" : "FAIL", metrics.livenessPassed ? "var(--accent-verify)" : "var(--accent-danger)"],
+    ["BLINK_DETECTED (진단용)", metrics.blinkDetected ? "YES" : "NO", "var(--text-dim)"],
+    ["JITTER_SCORE (진단용)", metrics.jitterScore, "var(--text-dim)"],
     ["SYNTHETIC_SCORE", `${metrics.syntheticScore} / 100`, metrics.syntheticSuspect ? "var(--accent-danger)" : "var(--accent-verify)"],
   ];
   return (

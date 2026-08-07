@@ -5,7 +5,7 @@ import FaceCapture from "@/components/FaceCapture";
 import { cosineDistance, FACENET512_COSINE_THRESHOLD } from "@/lib/vectorMath";
 
 // cosine distance 기준 (0 에 가까울수록 동일 인물).
-// Facenet512 기본값(0.30) 을 사용. 실측 데이터로 재보정 권장.
+// DeepFace 기본값 0.30 에서 실측 기반으로 0.25 까지 좁힌 값 (근거는 lib/vectorMath.js 주석).
 const MATCH_DISTANCE_THRESHOLD = FACENET512_COSINE_THRESHOLD;
 
 export default function AttendancePage() {

@@ -13,6 +13,12 @@ const path = require("path");
 
 const DB_PATH = path.join(__dirname, "..", "data", "db.json");
 
+// lib/vectorMath.js 의 FACENET512_COSINE_THRESHOLD 와 같은 값을 유지할 것.
+// (저쪽은 ESM 이고 이 스크립트는 CommonJS 라 직접 import 하지 않는다.)
+const MATCH_THRESHOLD = 0.25;
+// 임계값 ±BAND 구간 = "아슬아슬하게 갈린" 로그. 많으면 임계값 재보정 신호.
+const NEAR_BAND = 0.05;
+
 function main() {
   const argv = process.argv.slice(2);
   const all = argv.includes("--all");
@@ -71,15 +77,18 @@ function main() {
     const min = Math.min(...dists);
     const max = Math.max(...dists);
     const avg = dists.reduce((s, x) => s + x, 0) / dists.length;
+    const lo = MATCH_THRESHOLD - NEAR_BAND;
+    const hi = MATCH_THRESHOLD + NEAR_BAND;
     const nearThreshold = withDist.filter(
-      (l) => l.matchDistance >= 0.25 && l.matchDistance <= 0.35
+      (l) => l.matchDistance >= lo && l.matchDistance <= hi
     ).length;
 
     console.log();
     console.log(`총 ${merged.length}개 로그 표시 (matchDistance 유효: ${withDist.length}개)`);
     console.log(
       `matchDistance  min=${min.toFixed(4)}  max=${max.toFixed(4)}  ` +
-        `avg=${avg.toFixed(4)}  임계값(0.30) 근처(0.25~0.35): ${nearThreshold}개`
+        `avg=${avg.toFixed(4)}  임계값(${MATCH_THRESHOLD}) 근처` +
+        `(${lo.toFixed(2)}~${hi.toFixed(2)}): ${nearThreshold}개`
     );
   }
 }
