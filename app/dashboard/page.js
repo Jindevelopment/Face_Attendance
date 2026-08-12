@@ -1,15 +1,24 @@
 import { getUsers, getAttendanceLogs, getAntiSpoofLogs, isLegacyUser } from "@/lib/db";
+import { requireAdminPage } from "@/lib/requireAdmin";
 
 export const dynamic = "force-dynamic";
 
-export default function DashboardPage() {
-  const users = getUsers();
-  const attendanceLogs = getAttendanceLogs();
-  const antiSpoofLogs = getAntiSpoofLogs();
+// lib/db.js 가 Supabase 기반으로 바뀌면서 조회가 전부 async 가 됐다.
+export default async function DashboardPage() {
+  // 데이터를 조회하기 전에 인가를 확인한다.
+  await requireAdminPage("/dashboard");
+
+  const [users, attendanceLogs, antiSpoofLogs] = await Promise.all([
+    getUsers(),
+    getAttendanceLogs(),
+    getAntiSpoofLogs(),
+  ]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const todayCount = attendanceLogs.filter((l) => l.timestamp.startsWith(today)).length;
-  const spoofToday = antiSpoofLogs.filter((l) => l.timestamp.startsWith(today)).length;
+  // occurred_at 은 timestamptz 라 ISO 문자열로 내려오지만, 안전하게 Date 로 정규화한다.
+  const isToday = (l) => new Date(l.timestamp).toISOString().slice(0, 10) === today;
+  const todayCount = attendanceLogs.filter(isToday).length;
+  const spoofToday = antiSpoofLogs.filter(isToday).length;
   const legacyCount = users.filter(isLegacyUser).length;
 
   return (

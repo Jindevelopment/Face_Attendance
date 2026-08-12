@@ -107,3 +107,19 @@ body {
   background: var(--accent-verify-dim);
   color: white;
 }
+
+/* 로그인/회원가입 입력 필드 */
+.auth-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+.auth-input:focus {
+  border-color: var(--accent-verify);
+}

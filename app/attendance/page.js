@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import FaceCapture from "@/components/FaceCapture";
-import { cosineDistance, FACENET512_COSINE_THRESHOLD } from "@/lib/vectorMath";
 
-// cosine distance 기준 (0 에 가까울수록 동일 인물).
-// DeepFace 기본값 0.30 에서 실측 기반으로 0.25 까지 좁힌 값 (근거는 lib/vectorMath.js 주석).
-const MATCH_DISTANCE_THRESHOLD = FACENET512_COSINE_THRESHOLD;
+// 매칭과 임계값 판정은 서버(/api/match)에서 한다.
+// 클라이언트가 임계값을 정하면 요청 조작으로 아무 얼굴이나 통과시킬 수 있기 때문에,
+// 이 페이지는 embedding 을 보내고 결과만 받는다.
 
 export default function AttendancePage() {
   const [status, setStatus] = useState(null); // { type: 'success'|'spoof'|'no_match'|'duplicate', ... }
@@ -124,63 +123,56 @@ export default function AttendancePage() {
         return;
       }
 
-      // === 3단계: 등록 사용자와 cosine distance 매칭 ===
+      // === 3단계: 매칭 (서버) ===
+      // 이전에는 /api/users 로 등록자 전원의 embedding 을 받아 브라우저에서 비교했다.
+      // 그 방식은 이 페이지를 여는 누구에게나 타인의 생체정보를 넘겨준다.
+      // 이제 embedding 하나를 보내고 결과만 받는다 (매칭은 pgvector 가 수행).
       setPhase("matching");
-      const res = await fetch("/api/users");
-      const { users } = await res.json();
-      if (!users || users.length === 0) {
+      const matchRes = await fetch("/api/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embedding: df.embedding }),
+      });
+      const match = await matchRes.json();
+
+      if (!matchRes.ok) {
+        setStatus({
+          type: "no_match",
+          title: "매칭 실패",
+          desc: match?.message || "서버에서 얼굴 매칭에 실패했습니다.",
+        });
+        return;
+      }
+
+      if (match.reason === "no_users") {
         setStatus({ type: "no_match", title: "등록된 사용자 없음", desc: "먼저 얼굴을 등록해주세요." });
         return;
       }
 
-      let best = null;
-      let legacyCount = 0;
-      for (const u of users) {
-        if (!Array.isArray(u.embedding) || u.embedding.length !== df.embedding.length) {
-          // 구버전(face-api.js 128-d descriptor 등) 사용자는 매칭 대상 아님.
-          legacyCount += 1;
-          continue;
-        }
-        const d = cosineDistance(df.embedding, u.embedding);
-        if (!best || d < best.distance) best = { user: u, distance: d };
-      }
-
-      const eligibleCount = users.length - legacyCount;
-
-      if (!best || best.distance > MATCH_DISTANCE_THRESHOLD) {
-        const legacyNote =
-          legacyCount > 0
-            ? ` (매칭 제외된 레거시 유저 ${legacyCount}명 — 재등록 필요)`
-            : "";
+      if (!match.matched) {
         await logResult({
           result: "REJECTED_NO_MATCH",
-          reason: `매칭 실패 (최소 cos 거리 ${
-            best ? best.distance.toFixed(4) : "N/A"
-          }, 매칭 대상 ${eligibleCount}명${legacyNote})`,
+          reason: `매칭 실패 (임계값 ${match.threshold} 이내 없음, 등록자 ${match.totalUsers}명)`,
           metrics,
           deepfaceIsReal,
           deepfaceAntispoofScore,
-          matchDistance: best ? Number(best.distance.toFixed(4)) : null,
         });
         setStatus({
           type: "no_match",
           title: "일치하는 사용자 없음",
-          desc:
-            legacyCount > 0
-              ? `등록된 얼굴과 일치하지 않습니다. 대시보드에 표시된 레거시(재등록 필요) 사용자 ${legacyCount}명이 있는지 확인해주세요.`
-              : "등록된 얼굴과 일치하지 않습니다.",
+          desc: "등록된 얼굴과 일치하지 않습니다.",
         });
         return;
       }
 
       // === 4단계: 출결 기록 ===
-      const matchDistance = Number(best.distance.toFixed(4));
+      const matchDistance = match.distance;
       const attRes = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: best.user.id,
-          name: best.user.name,
+          userId: match.userId,
+          name: match.name,
           livenessPassed: metrics.livenessPassed,
           blinkDetected: metrics.blinkDetected,
           jitterScore: metrics.jitterScore,
@@ -197,13 +189,13 @@ export default function AttendancePage() {
       if (attData.status === "DUPLICATE") {
         setStatus({
           type: "duplicate",
-          title: `${best.user.name}님`,
+          title: `${match.name}님`,
           desc: "이미 최근에 출결이 기록되었습니다 (5분 이내 중복 방지).",
         });
       } else {
         setStatus({
           type: "success",
-          title: `${best.user.name}님 출석 완료`,
+          title: `${match.name}님 출석 완료`,
           desc: `cos 거리 ${matchDistance} · DeepFace 실물 판정 · antispoof ${
             deepfaceAntispoofScore ?? "N/A"
           }`,

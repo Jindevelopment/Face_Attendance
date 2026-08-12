@@ -6,11 +6,16 @@ import {
   getAntiSpoofLogs,
   hasRecentAttendance,
 } from "@/lib/db";
+import { checkAdminApi } from "@/lib/requireAdmin";
 
+// 로그 조회는 관리자 전용. POST(기록)는 키오스크가 호출하므로 열어둔다.
 export async function GET() {
+  const denied = await checkAdminApi();
+  if (denied) return NextResponse.json(denied, { status: denied.status });
+
   return NextResponse.json({
-    attendanceLogs: getAttendanceLogs(),
-    antiSpoofLogs: getAntiSpoofLogs(),
+    attendanceLogs: await getAttendanceLogs(),
+    antiSpoofLogs: await getAntiSpoofLogs(),
   });
 }
 
@@ -31,23 +36,21 @@ export async function POST(request) {
     reason,
   } = body;
 
-  const timestamp = new Date().toISOString();
+  // 기록 시각은 lib/db.js 가 occurred_at 에 직접 채운다.
 
   if (result === "SUCCESS") {
     if (!userId) {
       return NextResponse.json({ error: "userId가 필요합니다." }, { status: 400 });
     }
-    if (hasRecentAttendance(userId, 5)) {
+    if (await hasRecentAttendance(userId, 5)) {
       return NextResponse.json(
         { status: "DUPLICATE", message: "5분 이내 이미 출결이 기록되었습니다." },
         { status: 200 }
       );
     }
-    const log = addAttendanceLog({
-      id: `att_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    const log = await addAttendanceLog({
       userId,
       name,
-      timestamp,
       livenessPassed,
       blinkDetected,
       jitterScore,
@@ -61,9 +64,7 @@ export async function POST(request) {
   }
 
   // 위조 의심 / 매칭 실패 -> 이상 탐지 로그로 기록
-  const log = addAntiSpoofLog({
-    id: `spoof_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    timestamp,
+  const log = await addAntiSpoofLog({
     result: result || "REJECTED_UNKNOWN",
     reason: reason || "",
     livenessPassed,
