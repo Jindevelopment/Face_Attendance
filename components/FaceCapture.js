@@ -84,32 +84,82 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     };
   }, []);
 
+  // 카메라 장치 목록과 현재 선택. deviceId 를 지정하지 않으면 브라우저가 기본 장치를
+  // 고르는데, 그게 가상 카메라(팀즈/줌/제조사 유틸)면 프레임이 한 장도 오지 않는다.
+  // 실제로 이 노트북에서 Mirametrix 가상 카메라가 기본으로 잡혀 검은 화면이 나왔다.
+  const [devices, setDevices] = useState([]);
+  const [deviceId, setDeviceId] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
+
     async function startCamera() {
       try {
+        // 권한을 받기 전에는 enumerateDevices() 가 장치 label 을 빈 문자열로 준다.
+        // 그래서 스트림을 먼저 열고, 그 다음에 목록을 읽는다.
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 480, height: 480, facingMode: "user" },
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width: 480, height: 480 }
+            : { width: 480, height: 480, facingMode: "user" },
           audio: false,
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+
+        // 장치를 바꾸는 경우 이전 스트림을 먼저 정리한다. 안 그러면 카메라 LED 가
+        // 켜진 채로 남고, 장치에 따라 두 번째 열기가 실패한다.
+        streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          // 스트림을 받은 것과 프레임이 오는 것은 다르다. 가상 카메라는 트랙만 주고
+          // 영상을 내보내지 않는 경우가 있는데, 이때 "준비 완료" 로 표시하면
+          // 사용자가 스캔을 눌러도 얼굴이 영영 잡히지 않는다.
+          // 실제로 재생이 시작될 때까지 기다린다.
+          await new Promise((resolve) => {
+            if (video.readyState >= 2 && video.videoWidth > 0) return resolve();
+            video.onloadeddata = () => resolve();
+          });
         }
-        setCameraReady(true);
+        if (cancelled) return;
+
+        if (video && video.videoWidth === 0) {
+          setError(
+            "카메라에서 영상이 오지 않습니다. 아래에서 다른 카메라를 선택해보세요 " +
+              "(가상 카메라가 기본으로 잡힌 경우일 수 있습니다)."
+          );
+          setCameraReady(false);
+        } else {
+          setError("");
+          setCameraReady(true);
+        }
+
+        const list = await navigator.mediaDevices.enumerateDevices();
+        if (!cancelled) {
+          setDevices(list.filter((d) => d.kind === "videoinput"));
+          // 지금 실제로 열린 장치를 선택 상태로 반영한다.
+          const active = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+          if (active && !deviceId) setDeviceId(active);
+        }
       } catch (e) {
+        setCameraReady(false);
         setError("카메라 접근 실패: " + e.message + " (브라우저 카메라 권한을 확인해주세요)");
       }
     }
+
     startCamera();
     return () => {
       cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
+  }, [deviceId]);
+
+  // 언마운트 시에만 트랙을 정리한다. 장치 전환 중 정리는 startCamera 안에서 한다.
+  useEffect(() => {
+    return () => streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
   const detectOptions = useRef(
@@ -336,6 +386,36 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
       {error && (
         <div className="mono" style={{ color: "var(--accent-danger)", fontSize: 12, marginTop: 12, textAlign: "center" }}>
           {error}
+        </div>
+      )}
+
+      {/* 카메라가 둘 이상일 때만 보여준다. 한 대뿐이면 고를 것이 없다. */}
+      {devices.length > 1 && (
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          <select
+            value={deviceId ?? ""}
+            onChange={(e) => {
+              setCameraReady(false);
+              setDeviceId(e.target.value);
+            }}
+            disabled={scanning}
+            className="mono"
+            style={{
+              background: "var(--panel)",
+              color: "var(--text-dim)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              fontSize: 11.5,
+              padding: "5px 8px",
+              maxWidth: "100%",
+            }}
+          >
+            {devices.map((d, i) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `카메라 ${i + 1}`}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
