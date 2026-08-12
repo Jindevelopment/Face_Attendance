@@ -68,8 +68,12 @@ function Form() {
           const { data: loginData, error: loginError } =
             await supabase.auth.signInWithPassword({ email, password });
           if (loginError) {
+            // 원인이 두 가지다. 뭉뚱그려 "비밀번호가 틀렸다" 고 하면, 확인 메일을
+            // 안 누른 사람은 맞는 비밀번호를 계속 다시 넣게 된다.
             setError(
-              "이미 가입된 이메일입니다. 비밀번호가 맞지 않으니 기존 비밀번호로 다시 시도해주세요."
+              /Email not confirmed/i.test(loginError.message)
+                ? "이미 가입된 이메일인데 확인이 끝나지 않았습니다. 받은 확인 메일의 링크를 먼저 눌러주세요."
+                : "이미 가입된 이메일입니다. 기존 비밀번호로 다시 시도해주세요."
             );
             return;
           }
