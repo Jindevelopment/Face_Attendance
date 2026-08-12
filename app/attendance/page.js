@@ -171,13 +171,13 @@ export default function AttendancePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: match.userId,
-          name: match.name,
+          // 사용자 정보는 보내지 않는다. 서버가 서명한 증표만 돌려주면,
+          // 서버가 그 안에서 userId·name·거리를 꺼낸다.
+          matchToken: match.matchToken,
           livenessPassed: metrics.livenessPassed,
           blinkDetected: metrics.blinkDetected,
           jitterScore: metrics.jitterScore,
           syntheticScore: metrics.syntheticScore,
-          matchDistance,
           deepfaceIsReal,
           deepfaceAntispoofScore,
           challengeSequence: metrics.challengeSequence,
@@ -185,6 +185,16 @@ export default function AttendancePage() {
         }),
       });
       const attData = await attRes.json();
+
+      if (!attRes.ok) {
+        // 증표가 만료됐거나(스캔 후 2분 초과) 서버에 서명 키가 없는 경우.
+        setStatus({
+          type: "no_match",
+          title: "출결 기록 실패",
+          desc: attData?.message || "서버가 출결 기록을 거부했습니다.",
+        });
+        return;
+      }
 
       if (attData.status === "DUPLICATE") {
         setStatus({

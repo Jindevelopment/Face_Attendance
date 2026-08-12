@@ -116,6 +116,31 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
   ).current;
 
+  // 오버레이 그리기/지우기는 아래 runChallenge·runScan 이 호출하므로 그보다 먼저 선언한다.
+  // (함수 선언은 호이스팅되지만, 선언 전 참조는 react-hooks 규칙 위반이다.)
+  const drawOverlay = useCallback((detection, status) => {
+    const canvas = overlayRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const box = detection.detection.box;
+    const color =
+      status === "pass" ? "#34d8b0" : status === "fail" ? "#ff5470" : "#f5a623";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(box.x, box.y, box.width, box.height);
+  }, []);
+
+  const clearOverlay = useCallback(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
   // 챌린지 한 단계 수행. direction: "left" (본인 왼쪽, yawRatio > +YAW_THRESHOLD)
   //                             "right" (본인 오른쪽, yawRatio < -YAW_THRESHOLD)
   // requireReset=true 이면 |yaw| < RESET_YAW 를 먼저 관측한 뒤에만 목표 방향 검사 시작
@@ -144,7 +169,7 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
       }
       return false;
     },
-    [detectOptions]
+    [detectOptions, drawOverlay]
   );
 
   const runScan = useCallback(async () => {
@@ -252,30 +277,16 @@ export default function FaceCapture({ onCapture, actionLabel = "스캔 시작" }
     setScanning(false);
 
     onCapture?.(metrics);
-  }, [modelsLoaded, cameraReady, scanning, detectOptions, onCapture, runChallenge]);
-
-  function drawOverlay(detection, status) {
-    const canvas = overlayRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const box = detection.detection.box;
-    const color =
-      status === "pass" ? "#34d8b0" : status === "fail" ? "#ff5470" : "#f5a623";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.strokeRect(box.x, box.y, box.width, box.height);
-  }
-
-  function clearOverlay() {
-    const canvas = overlayRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
+  }, [
+    modelsLoaded,
+    cameraReady,
+    scanning,
+    detectOptions,
+    onCapture,
+    runChallenge,
+    drawOverlay,
+    clearOverlay,
+  ]);
 
   return (
     <div>

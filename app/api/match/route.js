@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { matchFace, countUsers, CURRENT_EMBEDDING_DIM } from "@/lib/db";
 import { FACENET512_COSINE_THRESHOLD } from "@/lib/vectorMath";
+import { signMatchToken } from "@/lib/matchToken";
 
 // 얼굴 매칭을 서버에서 수행한다.
 //
@@ -48,13 +49,17 @@ export async function POST(request) {
       });
     }
 
+    const distance = Number(best.distance.toFixed(4));
+
+    // userId 는 응답에 담지 않는다. 대신 서명된 증표를 준다.
+    // 브라우저가 userId 를 알면 그것만으로 출석을 위조할 수 있었다 (lib/matchToken.js 참고).
     return NextResponse.json({
       matched: true,
-      userId: best.id,
-      name: best.name,
-      distance: Number(best.distance.toFixed(4)),
+      name: best.name, // 화면에 "OOO님" 을 띄우기 위한 표시용
+      distance,
       threshold: FACENET512_COSINE_THRESHOLD,
       totalUsers: total,
+      matchToken: signMatchToken({ userId: best.id, name: best.name, distance }),
     });
   } catch (e) {
     return NextResponse.json(
