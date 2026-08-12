@@ -13,10 +13,12 @@ export default async function RootLayout({ children }) {
   // 실제 접근 차단은 proxy.js 와 각 페이지의 requireAdminPage() 가 담당한다.
   // 메뉴를 감추는 것은 편의일 뿐 보안 장치가 아니다.
   let isAdmin = false;
+  let isLoggedIn = false;
   let email = null;
   try {
     const state = await getAuthState(await cookies());
     isAdmin = state.isAdmin;
+    isLoggedIn = Boolean(state.user);
     email = state.user?.email ?? null;
   } catch {
     // Supabase 환경변수가 없는 상태에서도 앱이 뜨긴 해야 한다.
@@ -26,7 +28,7 @@ export default async function RootLayout({ children }) {
     <html lang="ko">
       <body>
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-          <NavBar isAdmin={isAdmin} email={email} />
+          <NavBar isAdmin={isAdmin} isLoggedIn={isLoggedIn} email={email} />
           <main style={{ flex: 1 }}>{children}</main>
           <Footer />
         </div>
@@ -35,7 +37,7 @@ export default async function RootLayout({ children }) {
   );
 }
 
-function NavBar({ isAdmin, email }) {
+function NavBar({ isAdmin, isLoggedIn, email }) {
   return (
     <header
       style={{
@@ -69,7 +71,9 @@ function NavBar({ isAdmin, email }) {
           <NavLink href="/attendance">출결 체크</NavLink>
           {isAdmin && <NavLink href="/register">얼굴 등록</NavLink>}
           {isAdmin && <NavLink href="/dashboard">대시보드</NavLink>}
-          {isAdmin ? (
+          {/* 로그아웃은 "로그인했는가" 기준으로 띄운다. 관리자 기준으로 두면
+              권한 없는 계정으로 로그인한 사람이 로그아웃할 방법이 없어진다. */}
+          {isLoggedIn ? (
             <form action="/logout" method="post" style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span className="mono" style={{ color: "var(--text-dim)", fontSize: 11 }}>{email}</span>
               <button

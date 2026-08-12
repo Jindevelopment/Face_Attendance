@@ -22,10 +22,16 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // 리다이렉트로 넘어온 사유를 화면에 설명한다.
+  // not_admin 은 "로그인은 됐지만 권한이 없음" 이라, 안내가 없으면 사용자는 비밀번호가
+  // 틀린 줄 알고 같은 화면에서 계속 재시도하게 된다.
+  const reason = params.get("error");
   const [error, setError] = useState(
-    params.get("error") === "config"
+    reason === "config"
       ? "Supabase 환경변수가 설정되지 않았습니다. .env.local 을 확인해주세요."
-      : ""
+      : reason === "not_admin"
+        ? "로그인은 되었지만 관리자 권한이 없습니다. 대시보드와 얼굴 등록은 관리자만 사용할 수 있습니다."
+        : ""
   );
 
   async function handleSubmit(e) {

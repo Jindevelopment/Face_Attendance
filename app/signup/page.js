@@ -7,6 +7,28 @@ import { AuthCard, Field, SubmitButton, Notice } from "@/components/AuthForm";
 
 const MIN_PASSWORD = 8;
 
+// Supabase 는 에러를 영어로 돌려준다. 사용자에게 그대로 보여주면 무슨 상황인지,
+// 특히 "내가 뭘 잘못했는지 / 기다리면 되는지" 를 알 수 없다.
+function translateSignUpError(message) {
+  if (/rate limit/i.test(message)) {
+    return (
+      "확인 메일 발송 한도에 걸렸습니다. Supabase 무료 플랜은 시간당 발송 건수가 " +
+      "적어(2~3건) 짧은 시간에 여러 명이 가입하면 막힙니다. 잠시 후 다시 시도하거나, " +
+      "Supabase 대시보드에서 SMTP 를 연결하세요."
+    );
+  }
+  if (/already registered|already been registered/i.test(message)) {
+    return "이미 가입된 이메일입니다. 로그인해주세요.";
+  }
+  if (/is invalid/i.test(message)) {
+    return "사용할 수 없는 이메일 주소입니다. 실제로 받을 수 있는 주소를 입력해주세요.";
+  }
+  if (/password/i.test(message)) {
+    return `비밀번호가 요건을 만족하지 않습니다 (${MIN_PASSWORD}자 이상). 원문: ${message}`;
+  }
+  return message;
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +55,7 @@ export default function SignupPage() {
       const supabase = createClientSupabase();
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
       if (signUpError) {
-        setError(signUpError.message);
+        setError(translateSignUpError(signUpError.message));
         return;
       }
       // 이메일 확인이 켜져 있으면 세션 없이 사용자만 생성된다.
