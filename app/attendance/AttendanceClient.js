@@ -16,7 +16,13 @@ const PHASE_TEXT = {
   saving: "출석을 기록하고 있습니다...",
 };
 
-export default function AttendanceClient({ orgName, totalUsers }) {
+// 다른 화면에서 튕겨 보낸 사유를 사람 말로 옮긴다.
+const NOTICE_TEXT = {
+  not_admin:
+    "관리자 전용 화면이라 이곳으로 옮겨왔습니다. 출결 체크와 내 기록은 그대로 쓰실 수 있습니다.",
+};
+
+export default function AttendanceClient({ orgName, totalUsers, notice }) {
   const [status, setStatus] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [phase, setPhase] = useState("idle");
@@ -247,6 +253,12 @@ export default function AttendanceClient({ orgName, totalUsers }) {
   return (
     <div className="page-mid">
       <PageHeader title="출결 체크" desc={orgName} />
+
+      {notice && NOTICE_TEXT[notice] && (
+        <div style={{ marginTop: 20 }}>
+          <Alert type="info">{NOTICE_TEXT[notice]}</Alert>
+        </div>
+      )}
 
       {totalUsers === 0 ? (
         <div className="section">
