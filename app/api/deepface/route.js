@@ -16,6 +16,11 @@ import { NextResponse } from "next/server";
 const DEEPFACE_URL =
   process.env.DEEPFACE_API_URL || "http://localhost:5005/represent-liveness";
 
+// 얼굴 인식 서버를 인터넷에 올리면 주소를 아는 누구나 호출할 수 있다.
+// 서버가 X-API-Key 를 요구하도록 해두고(deepface-api/run.py), 여기서 그 키를 보낸다.
+// 로컬 개발에서는 양쪽 다 없으면 그냥 통과한다.
+const DEEPFACE_API_KEY = process.env.DEEPFACE_API_KEY;
+
 // 등록/출결 모두 동일한 파이프라인 (임베딩 + anti-spoofing) 을 통과시킨다.
 // mode 는 향후 파라미터 분화 여지를 위해 남겨둔다 (예: 등록은 라이브니스만 완화).
 const MODEL_NAME = "Facenet512";
@@ -66,7 +71,10 @@ export async function POST(request) {
   try {
     upstream = await fetch(DEEPFACE_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(DEEPFACE_API_KEY ? { "X-API-Key": DEEPFACE_API_KEY } : {}),
+      },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });

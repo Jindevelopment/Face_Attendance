@@ -10,6 +10,7 @@
     DEEPFACE_FACE_RECOGNITION_MODELS    프리로드할 인식 모델 (기본 Facenet512)
     DEEPFACE_FACE_DETECTION_MODELS      프리로드할 감지기 (기본 retinaface,opencv)
     DEEPFACE_ANTI_SPOOFING              1 이면 라이브니스 모델(Fasnet) 프리로드
+    DEEPFACE_API_KEY                    설정 시 X-API-Key 헤더를 요구 (공개 배포 시 필수)
 """
 from __future__ import annotations
 
@@ -65,6 +66,68 @@ def _preload_models() -> None:
         )
     except Exception as exc:  # noqa: BLE001
         print(f"[deepface-api] warm-up skipped: {exc}", flush=True)
+
+
+def _register_auth(app) -> None:
+    """공유 키 인증.
+
+    이 서버를 인터넷에 올리면(예: Hugging Face Spaces) 주소를 아는 누구나 얼굴 이미지를
+    보내 분석시킬 수 있다. 저장되는 데이터는 없지만 남의 계산 자원을 그대로 쓰게 되고,
+    무료 얼굴 분석 API 로 전용될 수 있다.
+
+    DEEPFACE_API_KEY 가 설정돼 있으면 X-API-Key 헤더를 요구한다.
+
+    설정되지 않은 경우:
+      - 로컬 실행이면 통과시킨다 (개발할 때마다 키를 만들게 하면 번거롭다).
+      - 공개 호스팅으로 판단되면 거부한다. Hugging Face Spaces 는 SPACE_ID 를 넣어주므로
+        그것으로 구분한다. "동작은 하는데 아무나 쓸 수 있는" 상태가 조용히 유지되는 편이
+        더 위험하다.
+    """
+    from flask import jsonify, request
+
+    api_key = os.environ.get("DEEPFACE_API_KEY", "").strip()
+    is_public_host = bool(os.environ.get("SPACE_ID"))
+
+    if not api_key:
+        if is_public_host:
+            print(
+                "[deepface-api] 경고: 공개 호스팅인데 DEEPFACE_API_KEY 가 없습니다. "
+                "모든 요청을 거부합니다. Space 설정에서 Secret 을 추가하세요.",
+                flush=True,
+            )
+        else:
+            print(
+                "[deepface-api] DEEPFACE_API_KEY 미설정 — 인증 없이 동작합니다 (로컬 개발용).",
+                flush=True,
+            )
+
+    # 헬스체크는 키 없이 열어둔다. 호스팅 쪽에서 상태를 확인해야 하고,
+    # 응답에 정보가 담기지 않는다.
+    OPEN_PATHS = {"/health"}
+
+    @app.before_request
+    def _check_api_key():  # noqa: ANN202
+        if request.method == "OPTIONS" or request.path in OPEN_PATHS:
+            return None
+        if not api_key:
+            if is_public_host:
+                return (
+                    jsonify(
+                        {
+                            "error": "server_misconfigured",
+                            "message": "DEEPFACE_API_KEY 가 설정되지 않았습니다.",
+                        }
+                    ),
+                    503,
+                )
+            return None
+        if request.headers.get("X-API-Key") != api_key:
+            return jsonify({"error": "unauthorized"}), 401
+        return None
+
+    @app.route("/health", methods=["GET"])
+    def health():  # noqa: ANN202
+        return jsonify({"status": "ok", "auth": bool(api_key)})
 
 
 def _register_liveness_route(app) -> None:
@@ -213,8 +276,10 @@ def main() -> int:
     from deepface.api.src.app import create_app
 
     app = create_app()
+    _register_auth(app)
     _register_liveness_route(app)
 
+    # 도커 이미지에 가중치를 미리 구워두면(preload 단계) 여기서는 메모리에 올리기만 한다.
     _preload_models()
 
     print(

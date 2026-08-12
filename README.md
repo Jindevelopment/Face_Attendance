@@ -256,7 +256,10 @@ Vercel의 서버리스 함수는 이런 걸 감당하지 못합니다 (용량 �
 | Railway / Render | 간단하지만 무료 한도가 작아 메모리가 모자랄 수 있습니다. |
 | 직접 서버(VPS) | 가장 자유롭지만 관리가 필요합니다. |
 
-어디에 올리든 **주소를 Vercel 환경변수 `DEEPFACE_API_URL` 에 넣어야** 합니다.
+**단계별 절차는 [`deepface-api/DEPLOY.md`](deepface-api/DEPLOY.md) 에 있습니다.**
+Dockerfile 과 Space 설정 파일이 이미 준비돼 있어, 파일을 올리고 키만 넣으면 됩니다.
+
+올린 뒤 **주소를 Vercel 환경변수 `DEEPFACE_API_URL` 에 넣어야** 합니다.
 
 ```
 DEEPFACE_API_URL=https://내-얼굴서버-주소/represent-liveness
@@ -264,6 +267,10 @@ DEEPFACE_API_URL=https://내-얼굴서버-주소/represent-liveness
 
 이 값이 없으면 `http://localhost:5005` 를 찾다가 실패합니다. 배포된 웹사이트에서
 localhost는 **서버 자신**을 가리키므로 절대 연결되지 않습니다.
+
+> 🔒 **얼굴 서버에도 자물쇠가 필요합니다.** 인터넷에 올리면 주소를 아는 누구나 얼굴
+> 이미지를 보내 분석시킬 수 있습니다. `DEEPFACE_API_KEY` 를 양쪽(얼굴 서버·Vercel)에
+> 같은 값으로 넣으세요. 공개 호스팅인데 키가 없으면 서버가 **모든 요청을 거부**합니다.
 
 ### 6-2. Vercel에 웹사이트 올리기
 
@@ -277,7 +284,8 @@ localhost는 **서버 자신**을 가리키므로 절대 연결되지 않습니�
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` 과 동일 |
    | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` 과 동일 |
    | `ATTENDANCE_TOKEN_SECRET` | `.env.local` 과 동일 |
-   | `DEEPFACE_API_URL` | 6-1에서 올린 서버 주소 |
+   | `DEEPFACE_API_URL` | 6-1에서 올린 서버 주소 (`/represent-liveness` 까지) |
+   | `DEEPFACE_API_KEY` | 얼굴 서버에 넣은 것과 **같은 값** |
 
 4. **Deploy**
 
@@ -298,8 +306,8 @@ Supabase → Authentication → URL Configuration → Site URL
 ### 6-4. 배포 전 점검표
 
 - [ ] 4개 마이그레이션을 전부 실행했는가 (`scripts/verify-supabase.mjs` 로 확인)
-- [ ] 얼굴 인식 서버를 별도 호스팅에 올리고 주소를 확인했는가
-- [ ] Vercel 환경변수 5개를 모두 넣었는가 (특히 `DEEPFACE_API_URL`)
+- [ ] 얼굴 인식 서버를 별도 호스팅에 올리고 `/health` 가 `{"auth":true}` 를 주는가
+- [ ] Vercel 환경변수 6개를 모두 넣었는가 (특히 `DEEPFACE_API_URL`, `DEEPFACE_API_KEY`)
 - [ ] Supabase **Site URL** 을 배포 주소로 바꿨는가
 - [ ] SMTP를 붙이고 **Confirm email** 을 켰는가
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` 에 `NEXT_PUBLIC_` 을 붙이지 않았는가 ← 붙이면 얼굴 데이터가 전부 샙니다
@@ -539,7 +547,10 @@ node --env-file=.env.local scripts\analyze-spoof-logs.mjs      :: 출석/위조 
 | 카메라가 검은 화면 | 가상 카메라가 잡힘. 화면 아래 **드롭다운에서 다른 카메라 선택** |
 | 로그인은 되는데 대시보드가 안 보임 | 참여자 계정임. 관리자는 `/admin/login` 으로 |
 | 로그인 후 `/start` 가 뜸 | 소속 조직이 없음. 조직을 만들거나 인증코드를 입력 |
-| 배포 후 `DeepFace 서버 꺼짐` | `DEEPFACE_API_URL` 미설정 (§6-1) |
+| 배포 후 `DeepFace 서버 꺼짐` | `DEEPFACE_API_URL` 미설정 또는 오타 (§6-1) |
+| 얼굴 서버가 401 | 양쪽 `DEEPFACE_API_KEY` 가 다름 |
+| 얼굴 서버가 503 | 공개 호스팅인데 서버에 `DEEPFACE_API_KEY` 를 안 넣음 |
+| 배포 후 첫 스캔만 타임아웃 | 무료 티어 Space 가 잠들어 있었음. 다시 시도 |
 | 확인 메일 링크가 안 열림 | Supabase **Site URL** 이 localhost (§6-3) |
 
 ---
