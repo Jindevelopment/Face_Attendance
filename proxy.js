@@ -4,27 +4,39 @@
 // (node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md).
 //
 // 보호 대상:
-//   /dashboard  — 등록자 이름·연락처·출결 기록이 보인다
-//   /register   — 얼굴 등록. 열려 있으면 아무나 자기 얼굴을 새 사용자로 넣고 출석까지 찍는다
+//   /admin/*    — 대시보드·등록 관리·인증코드 (단, /admin/login 과 /admin/signup 은 제외)
+//   /attendance — 출결 체크. 이제 참여자도 계정을 갖는다
+//   /me         — 내 기록
+//   /start      — 로그인 직후 조직을 정하는 화면
 //
 // 공개:
-//   /attendance — 키오스크 화면. 막으면 용도가 없어진다
-//   /api/match, /api/deepface, POST /api/attendance — 키오스크가 쓰는 경로
+//   /, /login, /join, /admin/login, /admin/signup
+//   /api/deepface — 얼굴 분석 프록시. 여기서 막지 않고 라우트가 자체 판단한다
 //
-// 주의: 여기서는 "로그인 여부" 까지만 본다. 관리자 여부(is_admin)는 각 페이지와 API
-// 라우트에서 다시 확인한다. proxy 는 CDN 에 배포될 수 있어 DB 조회를 두기에 적합하지
-// 않고, 무엇보다 인가 판정을 한 곳에만 두면 그 한 곳을 우회당했을 때 방어선이 없다.
+// 주의: 여기서는 "로그인 여부" 까지만 본다. 조직 소속과 역할은 각 페이지와 API
+// 라우트에서 다시 확인한다 (lib/guards.js). proxy 는 CDN 에 배포될 수 있어 DB 조회를
+// 두기에 적합하지 않고, 무엇보다 인가 판정을 한 곳에만 두면 그 한 곳을 우회당했을 때
+// 방어선이 없다.
 
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PROTECTED = ["/dashboard", "/register"];
+const PROTECTED = ["/admin", "/attendance", "/me", "/start"];
+// 로그인 전에 볼 수 있어야 하는 예외. PROTECTED 보다 우선한다.
+const PUBLIC_EXCEPTIONS = ["/admin/login", "/admin/signup"];
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
-  const needsAuth = PROTECTED.some(
+  const isException = PUBLIC_EXCEPTIONS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
+  const needsAuth =
+    !isException &&
+    PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  // 관리 화면은 관리자 로그인으로, 나머지는 참여자 로그인으로 보낸다.
+  // 한쪽으로 몰면 참여자가 관리자 화면을 보게 되거나 그 반대가 된다.
+  const loginPath = pathname.startsWith("/admin") ? "/admin/login" : "/login";
 
   let response = NextResponse.next({ request });
 
@@ -34,7 +46,7 @@ export async function proxy(request) {
     // 환경변수가 없으면 인증을 판정할 수 없다. 보호 대상이면 열어주지 않고 막는다.
     if (needsAuth) {
       const to = request.nextUrl.clone();
-      to.pathname = "/login";
+      to.pathname = loginPath;
       to.searchParams.set("error", "config");
       return NextResponse.redirect(to);
     }
@@ -64,7 +76,7 @@ export async function proxy(request) {
 
   if (needsAuth && !user) {
     const to = request.nextUrl.clone();
-    to.pathname = "/login";
+    to.pathname = loginPath;
     to.searchParams.set("next", pathname);
     return NextResponse.redirect(to);
   }

@@ -6,21 +6,36 @@ import {
   getAntiSpoofLogs,
   hasRecentAttendance,
 } from "@/lib/db";
-import { checkAdminApi } from "@/lib/requireAdmin";
+import { checkOrgAdminApi, checkMemberApi } from "@/lib/guards";
 import { verifyMatchToken } from "@/lib/matchToken";
 
-// 로그 조회는 관리자 전용. POST(기록)는 키오스크가 호출하므로 열어둔다.
+// 로그 조회는 관리자 전용. 기록(POST)은 조직원이면 할 수 있다.
+//
+// 예전에는 POST 가 완전히 열려 있었다 (키오스크 가정). 이제 사용자도 계정을 갖고
+// 로그인해서 출결하므로, 열어 둘 이유가 없어졌다. 로그인은 요구하되, 누구인지는
+// 여전히 매칭 증표로만 판정한다 — 로그인 계정과 얼굴이 일치하는지는 별개 문제이고,
+// 계정만으로 출석을 인정하면 얼굴 인식을 할 이유가 사라진다.
+
 export async function GET() {
-  const denied = await checkAdminApi();
-  if (denied) return NextResponse.json(denied, { status: denied.status });
+  const auth = await checkOrgAdminApi();
+  if (auth.denied) {
+    return NextResponse.json(auth.denied, { status: auth.denied.status });
+  }
+  const orgId = auth.org.orgId;
 
   return NextResponse.json({
-    attendanceLogs: await getAttendanceLogs(),
-    antiSpoofLogs: await getAntiSpoofLogs(),
+    attendanceLogs: await getAttendanceLogs(orgId),
+    antiSpoofLogs: await getAntiSpoofLogs(orgId),
   });
 }
 
 export async function POST(request) {
+  const auth = await checkMemberApi();
+  if (auth.denied) {
+    return NextResponse.json(auth.denied, { status: auth.denied.status });
+  }
+  const orgId = auth.org.orgId;
+
   const body = await request.json();
   const {
     matchToken, // /api/match 가 매칭 성공 시에만 발급하는 서명된 증표
@@ -58,15 +73,29 @@ export async function POST(request) {
         { status }
       );
     }
+
+    // 증표에 적힌 조직과 지금 세션의 조직이 같아야 한다.
+    // 다르면 A 조직에서 받은 증표로 B 조직에 기록하려는 시도다.
+    if (verified.payload.orgId !== orgId) {
+      return NextResponse.json(
+        {
+          error: "org_mismatch",
+          message: "다른 조직의 매칭 증표입니다.",
+        },
+        { status: 403 }
+      );
+    }
+
     const { userId, name, distance } = verified.payload;
 
-    if (await hasRecentAttendance(userId, 5)) {
+    if (await hasRecentAttendance(orgId, userId, 5)) {
       return NextResponse.json(
         { status: "DUPLICATE", message: "5분 이내 이미 출결이 기록되었습니다." },
         { status: 200 }
       );
     }
     const log = await addAttendanceLog({
+      orgId,
       userId,
       name,
       livenessPassed,
@@ -85,6 +114,7 @@ export async function POST(request) {
   // 이쪽 값들은 검증되지 않은 클라이언트 주장이다. 출결로 이어지지 않는 관찰 기록이므로
   // 그대로 남기되, 신뢰해서 판단에 쓰지는 않는다.
   const log = await addAntiSpoofLog({
+    orgId,
     result: result || "REJECTED_UNKNOWN",
     reason: reason || "",
     livenessPassed,

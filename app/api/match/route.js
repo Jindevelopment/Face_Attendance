@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { matchFace, countUsers, CURRENT_EMBEDDING_DIM } from "@/lib/db";
 import { FACENET512_COSINE_THRESHOLD } from "@/lib/vectorMath";
 import { signMatchToken } from "@/lib/matchToken";
+import { checkMemberApi } from "@/lib/guards";
 
 // 얼굴 매칭을 서버에서 수행한다.
 //
@@ -11,10 +12,18 @@ import { signMatchToken } from "@/lib/matchToken";
 //
 // 임계값은 서버에서 정한다. 클라이언트가 threshold 를 넘기게 두면 요청을 조작해
 // 임계값을 1.0 으로 올리는 것만으로 아무 얼굴이나 통과시킬 수 있다.
+//
+// 조직은 세션에서 정한다. 요청 본문으로 받으면 남의 조직 사람과 매칭시킬 수 있다.
 
 export const runtime = "nodejs";
 
 export async function POST(request) {
+  const auth = await checkMemberApi();
+  if (auth.denied) {
+    return NextResponse.json(auth.denied, { status: auth.denied.status });
+  }
+  const orgId = auth.org.orgId;
+
   let body;
   try {
     body = await request.json();
@@ -34,12 +43,12 @@ export async function POST(request) {
   }
 
   try {
-    const total = await countUsers();
+    const total = await countUsers(orgId);
     if (total === 0) {
       return NextResponse.json({ matched: false, reason: "no_users", totalUsers: 0 });
     }
 
-    const best = await matchFace(embedding, FACENET512_COSINE_THRESHOLD);
+    const best = await matchFace(orgId, embedding, FACENET512_COSINE_THRESHOLD);
     if (!best) {
       return NextResponse.json({
         matched: false,
@@ -59,7 +68,7 @@ export async function POST(request) {
       distance,
       threshold: FACENET512_COSINE_THRESHOLD,
       totalUsers: total,
-      matchToken: signMatchToken({ userId: best.id, name: best.name, distance }),
+      matchToken: signMatchToken({ orgId, userId: best.id, name: best.name, distance }),
     });
   } catch (e) {
     return NextResponse.json(

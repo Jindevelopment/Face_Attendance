@@ -7,12 +7,13 @@ import { createClientSupabase } from "@/lib/supabaseAuth";
 import { AuthCard, Field, Input, Button, Alert } from "@/components/ui";
 import { translateAuthError } from "@/lib/authMessages";
 
-// 참여자 로그인. 로그인 후 /attendance 로 간다.
-// 관리자 로그인(/admin/login)과 계정은 같고, 역할은 memberships 가 결정한다.
+// 관리자 로그인. 참여자 로그인(/login)과 화면을 나눈 이유는, 로그인 후 갈 곳과
+// 실패했을 때 안내할 내용이 다르기 때문이다.
+// 계정 자체는 같은 Supabase Auth 를 쓰고, 역할은 memberships 가 결정한다.
 
-export default function LoginPage() {
+export default function AdminLoginPage() {
   return (
-    <Suspense fallback={<AuthCard title="로그인">불러오는 중...</AuthCard>}>
+    <Suspense fallback={<AuthCard title="관리자 로그인">불러오는 중...</AuthCard>}>
       <Form />
     </Suspense>
   );
@@ -21,7 +22,7 @@ export default function LoginPage() {
 function Form() {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") || "/attendance";
+  const nextPath = params.get("next") || "/admin/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,6 +47,7 @@ function Form() {
         setError(translateAuthError(signInError.message));
         return;
       }
+      // 세션 쿠키가 반영된 상태로 서버 컴포넌트를 다시 렌더링해야 한다.
       router.replace(nextPath);
       router.refresh();
     } catch (err) {
@@ -57,13 +59,13 @@ function Form() {
 
   return (
     <AuthCard
-      title="로그인"
-      desc="출결 체크와 내 기록을 볼 수 있습니다."
+      title="관리자 로그인"
+      desc="조직의 대시보드와 등록 관리로 들어갑니다."
       footer={
         <>
-          아직 참여하지 않으셨나요?{" "}
-          <Link href="/join" style={{ color: "var(--brand)" }}>
-            인증코드로 참여
+          아직 조직이 없으신가요?{" "}
+          <Link href="/admin/signup" style={{ color: "var(--brand)" }}>
+            조직 만들기
           </Link>
         </>
       }
@@ -94,9 +96,9 @@ function Form() {
         </Button>
       </form>
       <p style={{ marginTop: 16, fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6 }}>
-        조직을 관리하시는 분은{" "}
-        <Link href="/admin/login" style={{ color: "var(--text-dim)" }}>
-          관리자 로그인
+        참여자로 출결만 하실 분은{" "}
+        <Link href="/login" style={{ color: "var(--text-dim)" }}>
+          참여자 로그인
         </Link>
         을 이용하세요.
       </p>

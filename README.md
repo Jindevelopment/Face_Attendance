@@ -122,6 +122,14 @@ node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'
 > ⚠️ **반드시 Python 3.11을 쓰세요.** 3.12 이상에서는 torch가 설치는 되지만 **실행이 안 됩니다.**
 > (실제로 3.14로 만들었다가 `Failed to load PyTorch C extensions` 오류로 막혔습니다.)
 
+> ✅ **이미 설치돼 있다면 마지막 줄만 실행하세요.** 아래 명령으로 확인할 수 있습니다.
+>
+> ```cmd
+> deepface-api\.venv\Scripts\python.exe --version
+> ```
+>
+> `Python 3.11.x` 가 나오면 준비가 끝난 겁니다.
+
 **Windows 명령 프롬프트(cmd) 기준:**
 
 ```cmd
@@ -397,6 +405,8 @@ AI 판정이 17% 확률로 틀리니, **다른 방식의 문**을 하나 더 달
 | 증상 | 원인과 해결 |
 |---|---|
 | `Failed to load PyTorch C extensions` | Python 버전이 3.12 이상. **3.11로 venv를 다시 만드세요** (§3-3) |
+| venv 만들 때 `Permission denied: python.exe` | **서버가 이미 돌고 있어서** 그 파일을 잡고 있음. 서버 창에서 `Ctrl+C` 로 끄고 다시 시도하세요. 애초에 venv가 멀쩡하면 다시 만들 필요가 없습니다 |
+| 프롬프트에 `(.venv)` 가 붙어 있음 | 예전에 `activate` 를 실행한 흔적. `deactivate` 로 빠져나오면 되고, 이 문서 방식(`python.exe` 직접 호출)에서는 활성화 자체가 필요 없습니다 |
 | `Invalid supabaseUrl` | `.env.local` 에 `<project-ref>` 가 그대로 남아 있음 |
 | `Invalid API key` | 열쇠 종류를 착각했거나 잘려서 복사됨 (§3-1 경고 참고) |
 | 카메라가 검은 화면 | 가상 카메라가 잡힘. 화면 아래 **드롭다운에서 다른 카메라 선택** |

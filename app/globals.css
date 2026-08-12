@@ -1,18 +1,53 @@
 @import "tailwindcss";
 
+/* ===========================================================================
+   FaceGate 디자인 토큰
+   ---------------------------------------------------------------------------
+   화면마다 인라인 스타일로 색과 간격을 적어 두었더니, 같은 성격의 요소가 화면마다
+   조금씩 다르게 보였다. 값을 여기 한곳에 모으고 화면은 클래스만 쓴다.
+
+   어두운 테마를 유지한다. 카메라 화면이 주인공이라 배경이 밝으면 미리보기가 뜨고,
+   교실 앞에 띄워두는 화면이라 눈부심이 적은 쪽이 낫다.
+   =========================================================================== */
+
 :root {
-  --bg: #0b0f14;
-  --panel: #121821;
-  --panel-raised: #161d27;
-  --border: #1f2733;
-  --text: #e6edf3;
-  --text-dim: #8b98a5;
-  --accent-verify: #34d8b0;
-  --accent-verify-dim: #1b6b57;
-  --accent-warn: #f5a623;
-  --accent-danger: #ff5470;
+  /* 배경 계층 — 뒤에서 앞으로 갈수록 밝아진다 */
+  --bg: #0a0e13;
+  --surface: #121821;
+  --surface-2: #182029;
+  --surface-3: #1e2732;
+
+  --border: #232d3a;
+  --border-strong: #33404f;
+
+  /* 글자 — 3단계면 충분하다. 더 늘리면 위계가 흐려진다 */
+  --text: #e9eff5;
+  --text-dim: #98a5b3;
+  --text-faint: #64717f;
+
+  /* 의미색 */
+  --brand: #34d8b0;
+  --brand-ink: #04211a; /* brand 배경 위의 글자색 */
+  --brand-dim: #1b6b57;
+  --warn: #f5a623;
+  --danger: #ff5470;
+  --info: #5b9dff;
+
+  /* 반투명 배경 — 알림/뱃지용 */
+  --brand-soft: rgba(52, 216, 176, 0.1);
+  --warn-soft: rgba(245, 166, 35, 0.1);
+  --danger-soft: rgba(255, 84, 112, 0.1);
+  --info-soft: rgba(91, 157, 255, 0.1);
+
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-sm: 7px;
+
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard,
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
 * {
@@ -21,34 +56,433 @@
 
 html,
 body {
+  margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 키보드 사용자에게만 초점 링을 보인다 */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .mono {
   font-family: var(--font-mono);
 }
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+/* --- 레이아웃 ------------------------------------------------------------ */
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 24px 72px;
 }
+.page-narrow {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 56px 24px 72px;
+}
+.page-mid {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 40px 24px 72px;
+}
+
+.page-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.page-desc {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 8px 0 0;
+}
+.section {
+  margin-top: 36px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --- 카드 ---------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+}
+.card-pad-lg {
+  padding: 28px;
+}
+
+/* 클릭 가능한 카드 (랜딩의 갈래 선택 등) */
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.card-link:hover {
+  border-color: var(--brand);
+  background: var(--surface-2);
+  transform: translateY(-2px);
+}
+
+/* --- 버튼 ---------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+.btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.btn-block {
+  width: 100%;
+}
+.btn-lg {
+  padding: 15px 24px;
+  font-size: 15.5px;
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+/* --- 입력 ---------------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: 16px;
+}
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14.5px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+.input:focus {
+  border-color: var(--brand);
+}
+
+/* 인증코드 입력 — 8자리를 또박또박 보여준다 */
+.input-code {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 14px 13px;
+}
+
+/* --- 알림 ---------------------------------------------------------------- */
+
+.alert {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.65;
+  margin-bottom: 16px;
+}
+.alert strong {
+  color: var(--text);
+}
+.alert-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.alert-success {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.alert-warn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.alert-info {
+  border-color: var(--info);
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+/* --- 뱃지 ---------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.badge-brand {
+  border-color: var(--brand-dim);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.badge-warn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.badge-danger {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* --- 통계 타일 ----------------------------------------------------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-top: 4px;
+}
+
+/* --- 표 ------------------------------------------------------------------ */
+
+/* 표는 화면이 좁으면 가로로 넘친다. 페이지 전체가 흔들리지 않도록 표만 스크롤시킨다. */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+table.data th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+table.data td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+table.data tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- 빈 상태 ------------------------------------------------------------- */
+
+/* 데이터가 없을 때 표만 덩그러니 두면 고장 난 것처럼 보인다.
+   무엇을 하면 되는지 함께 보여준다. */
+.empty {
+  text-align: center;
+  padding: 40px 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.empty-title {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+/* --- 헤더 ---------------------------------------------------------------- */
+
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.85);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.nav-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 16.5px;
+  letter-spacing: -0.02em;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.nav-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-link:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* --- 인증코드 표시 ------------------------------------------------------- */
+
+.code-display {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.26em;
+  color: var(--brand);
+  background: var(--surface-2);
+  border: 1px solid var(--brand-dim);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  text-align: center;
+  /* letter-spacing 이 마지막 글자 뒤에도 붙어 가운데가 밀린다. 그만큼 보정한다. */
+  text-indent: 0.26em;
+  user-select: all;
+}
+
+/* --- 카메라 프레임 ------------------------------------------------------- */
 
 .scan-frame {
   position: relative;
 }
-
 .scan-frame .corner-tl,
 .scan-frame .corner-tr,
 .scan-frame .corner-bl,
 .scan-frame .corner-br {
-  content: "";
   position: absolute;
-  width: 28px;
-  height: 28px;
-  border-color: var(--accent-verify);
+  width: 30px;
+  height: 30px;
+  border-color: var(--brand);
   border-style: solid;
   border-width: 0;
   transition: border-color 0.2s ease;
@@ -103,23 +537,54 @@ body {
   animation: pulse-glow 1.4s ease-in-out infinite;
 }
 
+/* 움직임에 민감한 사용자를 위해 애니메이션을 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 ::selection {
-  background: var(--accent-verify-dim);
+  background: var(--brand-dim);
   color: white;
 }
 
-/* 로그인/회원가입 입력 필드 */
-.auth-input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel-raised);
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
+/* --- 푸터 ---------------------------------------------------------------- */
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 20px 24px;
+  margin-top: 48px;
+}
+.footer-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.auth-input:focus {
-  border-color: var(--accent-verify);
+@media (max-width: 560px) {
+  .page,
+  .page-mid {
+    padding: 28px 16px 56px;
+  }
+  .page-narrow {
+    padding: 36px 16px 56px;
+  }
+  .page-title {
+    font-size: 22px;
+  }
+  .code-display {
+    font-size: 22px;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
+  }
 }
