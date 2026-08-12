@@ -52,8 +52,13 @@ export async function POST(request) {
     if (error) {
       return NextResponse.json({ error: explain(error.message) }, { status: 400 });
     }
+    // 반환 컬럼에 o_ 접두사가 붙어 있다. 접두사 없이 org_id 로 두면 PL/pgSQL 안에서
+    // 테이블 컬럼과 충돌해 "ambiguous" 로 실패한다 (0004_fix_ambiguous_org_id.sql).
     const row = Array.isArray(data) ? data[0] : data;
-    return NextResponse.json({ orgId: row.org_id, joinCode: row.join_code }, { status: 201 });
+    return NextResponse.json(
+      { orgId: row.o_org_id, joinCode: row.o_join_code },
+      { status: 201 }
+    );
   }
 
   if (action === "join") {
@@ -65,7 +70,7 @@ export async function POST(request) {
       return NextResponse.json({ error: explain(error.message) }, { status: 400 });
     }
     const row = Array.isArray(data) ? data[0] : data;
-    return NextResponse.json({ orgId: row.org_id, orgName: row.org_name });
+    return NextResponse.json({ orgId: row.o_org_id, orgName: row.o_org_name });
   }
 
   if (action === "rotate") {
