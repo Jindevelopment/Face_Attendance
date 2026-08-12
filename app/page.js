@@ -68,14 +68,15 @@ export default async function Home() {
           <Link href="/join" className="card card-link card-pad-lg">
             <Badge>참여자</Badge>
             <h2 style={{ fontSize: 19, fontWeight: 800, margin: "14px 0 8px", letterSpacing: "-0.02em" }}>
-              인증코드로 참여
+              참여자 회원가입
             </h2>
             <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.65, margin: 0 }}>
-              관리자에게 받은 8자리 코드를 입력하면 그 조직의 출결 화면으로 들어갑니다.
-              얼굴을 한 번 등록하면 그다음부터는 카메라 앞에 서기만 하면 됩니다.
+              관리자에게 받은 <strong style={{ color: "var(--text)" }}>8자리 인증코드</strong>와
+              이메일·비밀번호로 가입합니다. 얼굴을 한 번 등록하면 그다음부터는 카메라 앞에
+              서기만 하면 됩니다.
             </p>
             <div style={{ marginTop: 18, color: "var(--brand)", fontWeight: 700, fontSize: 14 }}>
-              코드 입력 →
+              가입하기 →
             </div>
           </Link>
         </div>

@@ -96,7 +96,7 @@ function NavBar({ state }) {
                 href="/join"
                 style={{ padding: "8px 14px", fontSize: 13 }}
               >
-                코드로 참여
+                회원가입
               </Link>
             </>
           )}

@@ -57,16 +57,8 @@ function Form() {
 
   return (
     <AuthCard
-      title="로그인"
+      title="참여자 로그인"
       desc="출결 체크와 내 기록을 볼 수 있습니다."
-      footer={
-        <>
-          아직 참여하지 않으셨나요?{" "}
-          <Link href="/join" style={{ color: "var(--brand)" }}>
-            인증코드로 참여
-          </Link>
-        </>
-      }
       backTo={{ href: "/", label: "처음으로" }}
     >
       <form onSubmit={handleSubmit}>
@@ -93,6 +85,26 @@ function Form() {
           {submitting ? "로그인 중..." : "로그인"}
         </Button>
       </form>
+
+      {/* 계정이 없는 사람이 여기 먼저 온다. 인증코드를 받아 든 사람의 머릿속은
+          "이걸 어디 넣지?" 인데, 자연스럽게 로그인을 먼저 누르기 때문이다.
+          작은 글씨 링크로 두었더니 회원가입이 없는 것처럼 보였다. */}
+      <div
+        style={{
+          marginTop: 20,
+          paddingTop: 18,
+          borderTop: "1px solid var(--border)",
+        }}
+      >
+        <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 10px" }}>
+          계정이 없으신가요? 관리자에게 받은 <strong style={{ color: "var(--text)" }}>인증코드</strong>로
+          가입할 수 있습니다.
+        </p>
+        <Link href="/join" className="btn btn-ghost btn-block">
+          참여자 회원가입
+        </Link>
+      </div>
+
       <p style={{ marginTop: 16, fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6 }}>
         조직을 관리하시는 분은{" "}
         <Link href="/admin/login" style={{ color: "var(--text-dim)" }}>

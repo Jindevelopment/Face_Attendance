@@ -61,14 +61,6 @@ function Form() {
     <AuthCard
       title="관리자 로그인"
       desc="조직의 대시보드와 등록 관리로 들어갑니다."
-      footer={
-        <>
-          아직 조직이 없으신가요?{" "}
-          <Link href="/admin/signup" style={{ color: "var(--brand)" }}>
-            조직 만들기
-          </Link>
-        </>
-      }
       backTo={{ href: "/", label: "처음으로" }}
     >
       <form onSubmit={handleSubmit}>
@@ -95,6 +87,16 @@ function Form() {
           {submitting ? "로그인 중..." : "로그인"}
         </Button>
       </form>
+
+      <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 10px" }}>
+          아직 조직이 없으신가요? 가입하면서 조직을 만들 수 있습니다.
+        </p>
+        <Link href="/admin/signup" className="btn btn-ghost btn-block">
+          관리자 회원가입
+        </Link>
+      </div>
+
       <p style={{ marginTop: 16, fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6 }}>
         참여자로 출결만 하실 분은{" "}
         <Link href="/login" style={{ color: "var(--text-dim)" }}>

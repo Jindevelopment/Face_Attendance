@@ -150,11 +150,11 @@ function Form() {
 
   return (
     <AuthCard
-      title="인증코드로 참여"
-      desc="관리자에게 받은 8자리 코드를 입력하세요."
+      title="참여자 회원가입"
+      desc="인증코드를 넣고 계정을 만들면 그 조직의 출결에 참여할 수 있습니다."
       footer={
         <>
-          이미 참여하셨나요?{" "}
+          이미 계정이 있으신가요?{" "}
           <Link href="/login" style={{ color: "var(--brand)" }}>
             로그인
           </Link>
@@ -163,6 +163,9 @@ function Form() {
       backTo={{ href: "/", label: "처음으로" }}
     >
       <form onSubmit={handleSubmit}>
+        {/* 이 화면이 "코드 입력기" 로만 보여서, 회원가입을 하러 온 사람이 알아보지 못했다.
+            두 부분으로 이루어져 있다는 것을 눈에 보이게 나눈다. */}
+        <StepLabel n="1" text="관리자에게 받은 인증코드" />
         <Field label="인증코드" hint="대소문자는 구분하지 않습니다. 공백이 섞여도 괜찮습니다.">
           <Input
             className="input-code"
@@ -176,6 +179,8 @@ function Form() {
             spellCheck={false}
           />
         </Field>
+
+        <StepLabel n="2" text="로그인에 쓸 계정 만들기" />
         <Field label="이메일">
           <Input
             type="email"
@@ -204,10 +209,40 @@ function Form() {
           />
         </Field>
         {error && <Alert type="error">{error}</Alert>}
-        <Button type="submit" disabled={submitting} block>
-          {submitting ? "참여하는 중..." : "참여하기"}
+        <Button type="submit" disabled={submitting} block size="lg">
+          {submitting ? "가입하는 중..." : "가입하고 참여하기"}
         </Button>
       </form>
     </AuthCard>
+  );
+}
+
+// 폼이 "코드" 와 "계정" 두 부분으로 나뉜다는 것을 보이게 한다.
+function StepLabel({ n, text }) {
+  return (
+    <div
+      className="row"
+      style={{ gap: 8, marginBottom: 10, marginTop: 4 }}
+    >
+      <span
+        className="mono"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          background: "var(--brand-soft)",
+          border: "1px solid var(--brand-dim)",
+          color: "var(--brand)",
+          fontSize: 11,
+          fontWeight: 700,
+        }}
+      >
+        {n}
+      </span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{text}</span>
+    </div>
   );
 }

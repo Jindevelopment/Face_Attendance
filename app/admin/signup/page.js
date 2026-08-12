@@ -129,8 +129,8 @@ export default function AdminSignupPage() {
 
   return (
     <AuthCard
-      title="조직 만들기"
-      desc="출결을 관리할 조직을 만듭니다. 만들면 참여자에게 나눠줄 인증코드가 나옵니다."
+      title="관리자 회원가입"
+      desc="계정을 만들면서 조직을 함께 만듭니다. 만들고 나면 참여자에게 나눠줄 인증코드가 나옵니다."
       footer={
         <>
           이미 계정이 있으신가요?{" "}
