@@ -11,29 +11,38 @@ Next.js 는 `/api/deepface` 프록시 라우트를 통해서만 이 서버를 �
 
 ---
 
-## 1. 실행 방법 (Windows / PowerShell 기준)
+## 1. 실행 방법 (Windows)
 
-```powershell
+> ⚠️ **Python 3.11 을 써야 한다.** torch 2.4.1 은 3.12 이상용 빌드가 없다.
+> 3.14 로 venv 를 만들면 `pip install` 은 성공하는 것처럼 보이지만, 실행 시
+> `ImportError: Failed to load PyTorch C extensions` 로 죽는다 (2026-08-12 확인).
+> `py -0` 으로 설치된 버전을 확인할 수 있다.
+
+```cmd
 cd deepface-api
 
-# (1) venv 생성 및 활성화
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+:: (1) venv 생성 — 반드시 3.11
+py -3.11 -m venv .venv
 
-# (2) torch CPU 빌드 먼저 설치 (용량이 커서 별도로 미리)
-pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
+:: (2) torch CPU 빌드 먼저 설치 (용량이 커서 별도로 미리)
+.venv\Scripts\python.exe -m pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
 
-# (3) 나머지 의존성 설치
-pip install -r requirements.txt
+:: (3) 나머지 의존성 설치
+.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# (4) 환경변수 파일 준비 (선택)
+:: (4) 환경변수 파일 준비 (선택)
 copy .env.example .env
 
-# (5) 서버 실행
-python run.py
+:: (5) 서버 실행
+.venv\Scripts\python.exe run.py
 ```
 
-macOS / Linux (bash) 는 `.venv/bin/activate` 로 활성화하면 나머지는 동일하다.
+> 💡 **`activate` 를 쓰지 않는 이유**: 활성화 명령이 셸마다 다르다
+> (cmd `.venv\Scripts\activate.bat`, PowerShell `.\.venv\Scripts\Activate.ps1`).
+> 셸을 착각해 활성화가 안 된 채 `pip install` 을 하면 **전역 파이썬에 설치되어**
+> 원인을 찾기 어려운 버전 오류가 난다. `python.exe` 를 직접 부르면 이 실수가 없다.
+
+macOS / Linux 는 `python3.11 -m venv .venv` 후 `.venv/bin/python` 을 같은 방식으로 부르면 된다.
 
 첫 실행 시 DeepFace 가 Facenet512 가중치 (약 90MB), MiniFASNet, RetinaFace 가중치를 자동 다운로드한다.
 다운로드가 끝나면 다음과 같은 로그가 뜬다:
@@ -103,7 +112,9 @@ DeepFace 0.0.93 의 `/represent` 는 `anti_spoofing=True` 를 넘겨도 성공 �
 를 노출한다.
 
 `/verify`, `/analyze` 등 다른 엔드포인트는 이 프로젝트에서 사용하지 않는다
-(DB 연동은 Next.js 쪽 `data/db.json` 에서 처리).
+(DB 연동은 Next.js 쪽에서 Supabase 로 처리한다 — `lib/db.js`).
+이 서버는 상태를 갖지 않는다. 이미지를 받아 임베딩과 라이브니스 판정만 돌려주고,
+저장은 전부 Next.js 쪽이 담당한다.
 
 ---
 
